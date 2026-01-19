@@ -1,51 +1,46 @@
-from flask import Flask, request, jsonify
-from db import get_db, create_table
-from encryption import encrypt_data, decrypt_data
-from capability import validate_capability
+from flask import Flask, render_template, request
+import uuid
+from db import get_db, create_tables
 
 app = Flask(__name__)
-create_table()
+create_tables()
 
 @app.route("/")
 def home():
-    return jsonify({"status": "Secure SQL Injection Project Running"})
+    return render_template("index.html")
 
-# REGISTER USER (SECURE)
-@app.route("/register", methods=["POST"])
-def register():
-    token = request.headers.get("Capability-Code")
-    if not validate_capability(token):
-        return jsonify({"error": "Unauthorized Access"}), 403
+@app.route("/book")
+def book():
+    return render_template("book.html")
 
-    data = request.json
-    username = encrypt_data(data["username"])
-    password = encrypt_data(data["password"])
+@app.route("/confirm", methods=["POST"])
+def confirm():
+    name = request.form["name"]
+    route = request.form["route"]
+
+    # Server-side fixed pricing
+    pricing = {
+        "Route A": 50,
+        "Route B": 70,
+        "Route C": 100
+    }
+
+    price = pricing.get(route, 0)
+    ticket_id = str(uuid.uuid4())
 
     db = get_db()
     db.execute(
-        "INSERT INTO users (username, password) VALUES (?, ?)",
-        (username, password)   # 🔐 SQL Injection SAFE
+        "INSERT INTO tickets (name, route, price, ticket_id) VALUES (?, ?, ?, ?)",
+        (name, route, price, ticket_id)
     )
     db.commit()
     db.close()
 
-    return jsonify({"message": "User Registered Securely"})
+    return render_template("ticket.html",
+                           name=name,
+                           route=route,
+                           price=price,
+                           ticket_id=ticket_id)
 
-# LOGIN (SQL INJECTION BLOCKED)
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.json
-    username = encrypt_data(data["username"])
-
-    db = get_db()
-    cur = db.execute(
-        "SELECT * FROM users WHERE username = ?",
-        (username,)
-    )
-    user = cur.fetchone()
-    db.close()
-
-    if user:
-        return jsonify({"status": "Login Successful"})
-    else:
-        return jsonify({"status": "Invalid Credentials"})
+if __name__ == "__main__":
+    app.run(debug=True)
